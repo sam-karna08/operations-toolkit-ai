@@ -1,9 +1,9 @@
 import type { ProblemBrief } from "./problem-brief";
 
-const unknown = "Unknown";
+const unknown = "Not specified in the input.";
 
 const symptomPattern =
-  /\b(?:miss(?:ed|es|ing)\s+(?:project\s+)?deadlines?|deadline(?:s)?\s+(?:are|were|have been)\s+missed|complain(?:ing|ts?)\s+(?:more|increased|have increased)|complaints?\s+(?:have\s+)?increas(?:ed|ing)|(?:orders?|deliveries|projects?|requests?)\s+(?:are\s+)?(?:late|overdue|delayed)|running out|run out|backlog|taking too long|too long|(?:approval|review)\s+process(?:es)?\s+(?:is|are)\s+too long|the delay\b|too many errors?|(?:operational\s+)?issues?|problems?|failures?)\b/i;
+  /\b(?:miss(?:ed|es|ing)\s+(?:project\s+)?deadlines?|deadline(?:s)?\s+(?:are|were|have been)\s+missed|complain(?:ing|ts?)\s+(?:more|increased|have increased)|complaints?\s+(?:have\s+)?increas(?:ed|ing)|(?:orders?|deliveries|projects?|requests?)\s+(?:are\s+)?(?:late|overdue|delayed)|running out|run out|backlog|taking too long|too long|(?:approval|review)\s+process(?:es)?\s+(?:is|are)\s+too long|the delay\b|too many errors?|(?:operational\s+)?issues?|problems?|failures?|(?:revenue|sales|volume|price|mix|margin|costs?|expenses?|EBITDA|cash flow|working capital|forecast|budget|variance)[^.!?]{0,100}\b(?:above|below|negative|increased|decreased|declined|worsened|missed|shortfall|pressure|turned)\b)\b/i;
 
 function splitSentences(transcript: string) {
   return transcript
@@ -143,6 +143,12 @@ function conciseProblemStatement(symptom: string) {
   return capitalize(withoutLeadIn.replace(/[.!?]*$/, "")) + ".";
 }
 
+function preserveProblemStatement(transcript: string, sentences: string[], symptom: string | undefined) {
+  if (symptom) return conciseProblemStatement(symptom);
+  const firstStatement = sentences[0] ?? transcript;
+  return /[.!?]$/.test(firstStatement) ? firstStatement : `${firstStatement}.`;
+}
+
 function factualSymptom(symptom: string) {
   if (/\bmiss(?:ed|es|ing)\s+(?:project\s+)?deadlines?|\bdeadline(?:s)?\s+(?:are|were|have been)\s+missed/i.test(symptom)) {
     return "The team has been missing project deadlines.";
@@ -159,6 +165,9 @@ function factualSymptom(symptom: string) {
 function extractStakeholders(transcript: string) {
   const teamLabel = /\bproject\b/i.test(transcript) ? "Project team" : "Team";
   const stakeholderPatterns: Array<[RegExp, string]> = [
+    [/\bmanufactur(?:ing|er)\s+(?:company|business|plant|operation)\b/i, "Manufacturing"],
+    [/\bfinance|FP&A\b/i, "Finance"],
+    [/\bmanagement|managers?\b/i, "Management"],
     [/\bdelivery team\b/i, "Delivery team"],
     [/\bproject team\b/i, "Project team"],
     [/\b(?:our|the)\s+team\b|\bteam\b/i, teamLabel],
@@ -181,7 +190,7 @@ function extractStakeholders(transcript: string) {
 }
 
 function deriveContext(transcript: string, symptom: string | undefined) {
-  if (!symptom) return unknown;
+  if (!symptom) return "Business context and timeframe are not specified in the input.";
   if (/\bproject\b/i.test(transcript) && /\bdeadline/i.test(symptom) && /\bteam\b/i.test(transcript)) {
     return "The issue is affecting the team’s ability to deliver projects on time.";
   }
@@ -197,13 +206,13 @@ function deriveContext(transcript: string, symptom: string | undefined) {
   }
   if (explicitContext) return capitalize(explicitContext[0]) + ".";
   if (timeContext) return `The issue has been observed ${timeContext[0]}.`;
-  return unknown;
+  return "Time period and operating conditions are not specified in the input.";
 }
 
 function extractDesiredOutcome(transcript: string, symptom: string | undefined) {
-  const intent = transcript.match(
-    /\b(?:i|we)\s+(?:want|need|would like|hope|aim)\s+to\s+([^.!?]+)/i,
-  );
+  const directIntent = transcript.match(/\b(?:investigate|analyze|analyse|assess|identify|determine|understand|review)\s+[^.!?]+/i);
+  if (directIntent) return capitalize(directIntent[0].replace(/[.!?]*$/, "")) + ".";
+  const intent = transcript.match(/\b(?:i|we)\s+(?:want|need|would like|hope|aim)\s+to\s+([^.!?]+)/i);
   if (!intent) return unknown;
 
   const objective = cleanPhrase(intent[1])
@@ -227,7 +236,19 @@ function extractDesiredOutcome(transcript: string, symptom: string | undefined) 
 
 function extractUnknowns(transcript: string, causes: string[], symptom: string | undefined) {
   const expressesUncertainty = /\b(?:not (?:exactly |really |completely )?sure|unsure|don't know|do not know|unclear|uncertain|no idea|wondering|what is actually causing|what's actually causing|figure out whether)\b/i.test(transcript);
-  if (!expressesUncertainty) return [];
+  const financialDataRequests = /\b(?:EBITDA|working capital|operating cash flow|price[- ]volume[- ]mix|PVM|budget|forecast|margin)\b/i.test(transcript)
+    ? [
+      "Price-volume-mix bridge by product, customer, and period, with realized prices and unit volumes.",
+      "Budget-versus-actual cost variance by category, separating rate and volume effects.",
+      "Receivables, inventory, and payables movements reconciled to the operating cash-flow change.",
+      "Forecast assumptions and the EBITDA-to-cash bridge compared with actual results.",
+    ]
+    : [];
+  if (!expressesUncertainty) {
+    return financialDataRequests.length
+      ? financialDataRequests
+      : ["Baseline by period and breakdown by process, product, or customer are not specified."];
+  }
 
   const issue = symptom && /\bdeadline/i.test(symptom) ? "the project delays" : "the issue";
   if (!causes.length) return [`What is causing ${issue}?`];
@@ -256,7 +277,7 @@ function extractUnknowns(transcript: string, causes: string[], symptom: string |
     const plural = /^(?:too many|changing requirements|multiple)\b/i.test(cause);
     return `Whether ${cause.toLocaleLowerCase()} ${plural ? "are" : "is"} contributing to ${issue}.`;
   });
-  const unknowns = causeQuestions;
+  const unknowns = [...causeQuestions, ...financialDataRequests];
   if (causes.length > 1) unknowns.unshift(`Which possible cause contributes most to ${issue}.`);
   return unique(unknowns);
 }
@@ -287,13 +308,13 @@ export const problemBriefService = {
     const sentences = splitSentences(cleaned);
     const causes = extractCauses(sentences);
     const symptoms = extractSymptoms(sentences);
-    if (!symptoms.length && /\bthe delay\b/i.test(cleaned)) symptoms.push("the delay");
+    if (!symptoms.length) symptoms.push(sentences[0] ?? cleaned);
     const primarySymptom = symptoms[0];
     const unknowns = extractUnknowns(cleaned, causes, primarySymptom);
     const facts = summarizeKnownFacts(symptoms, causes.length);
 
     return {
-      problemStatement: primarySymptom ? conciseProblemStatement(primarySymptom) : unknown,
+      problemStatement: preserveProblemStatement(cleaned, sentences, primarySymptom),
       businessContext: deriveContext(cleaned, primarySymptom),
       observableSymptoms: symptoms.length ? asBulletList(symptoms.map(conciseProblemStatement)) : unknown,
       knownFacts: asBulletList(facts),
