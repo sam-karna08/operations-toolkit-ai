@@ -13,6 +13,7 @@ import {
 } from "@/lib/gemini-provider";
 import { isProblemBrief } from "@/lib/problem-brief";
 import { getFramework } from "@/lib/frameworks";
+import { countProblemWords, MAX_PROBLEM_WORDS, problemWordLimitMessage } from "@/lib/problem-limits";
 
 export const maxDuration = 60;
 
@@ -80,6 +81,15 @@ export async function POST(request: Request) {
   } | null;
   if (!body || !isProblemBrief(body.problemBrief)) {
     return NextResponse.json({ error: "A valid Problem Brief is required." }, { status: 400 });
+  }
+  const problemDescription = typeof body.cleanedTranscript === "string" && body.cleanedTranscript.trim()
+    ? body.cleanedTranscript
+    : typeof body.rawProblem === "string" && body.rawProblem.trim()
+      ? body.rawProblem
+      : body.problemBrief.problemStatement;
+  const problemWordCount = countProblemWords(problemDescription);
+  if (problemWordCount > MAX_PROBLEM_WORDS) {
+    return NextResponse.json({ error: problemWordLimitMessage(problemWordCount) }, { status: 400 });
   }
 
   const context: DiagnosticContext = {
