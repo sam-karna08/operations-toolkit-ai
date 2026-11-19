@@ -3,7 +3,12 @@ import {
   isFiveWhysWorkspaceData,
   type FiveWhysWorkspaceData,
 } from "./five-whys";
-import { isOperationsDiagnostic, type OperationsDiagnostic } from "./diagnostic";
+import {
+  isFrameworkApplication,
+  isOperationsDiagnostic,
+  type FrameworkApplication,
+  type OperationsDiagnostic,
+} from "./diagnostic";
 
 export type AnalysisHistoryEntry = {
   problem: string;
@@ -12,6 +17,7 @@ export type AnalysisHistoryEntry = {
   problemBrief?: ProblemBrief;
   fiveWhys?: FiveWhysWorkspaceData;
   diagnostic?: OperationsDiagnostic;
+  frameworkApplications?: FrameworkApplication[];
 };
 
 export interface HistoryRepository {
@@ -32,6 +38,8 @@ function isHistoryEntry(value: unknown): value is AnalysisHistoryEntry {
     (entry.problemBrief === undefined || isProblemBrief(entry.problemBrief)) &&
     (entry.fiveWhys === undefined || isFiveWhysWorkspaceData(entry.fiveWhys))
     && (entry.diagnostic === undefined || isOperationsDiagnostic(entry.diagnostic))
+    && (entry.frameworkApplications === undefined
+      || (Array.isArray(entry.frameworkApplications) && entry.frameworkApplications.every(isFrameworkApplication)))
   );
 }
 
@@ -52,6 +60,29 @@ export function attachFiveWhysWorkspace(
         ...entry,
         problemBrief: { ...workspace.problemBrief },
         fiveWhys: workspace,
+      };
+    }
+    return entry;
+  });
+  return matched ? updated : null;
+}
+
+export function attachFrameworkApplication(
+  entries: AnalysisHistoryEntry[],
+  analysisDate: string,
+  application: FrameworkApplication,
+): AnalysisHistoryEntry[] | null {
+  let matched = false;
+  const updated = entries.map((entry) => {
+    if (!matched && entry.date === analysisDate && entry.problem === application.problem) {
+      matched = true;
+      const applications = entry.frameworkApplications ?? [];
+      return {
+        ...entry,
+        frameworkApplications: [
+          ...applications.filter((item) => item.framework.id !== application.framework.id),
+          application,
+        ],
       };
     }
     return entry;

@@ -370,7 +370,7 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
           <div>
             <div className="mb-3 flex items-start gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eaf3ec] text-[#47815a]"><Sparkles size={16} /></div>
-              <div><h4 className="text-[13px] font-semibold text-[#3d4c41]">Here’s what I understood</h4><p className="mt-1 max-w-[540px] text-[10px] leading-[1.6] text-[#838e86]">Review the brief. Anything not stated is marked “Unknown”—edit any field before continuing.</p></div>
+              <div><h4 className="text-[13px] font-semibold text-[#3d4c41]">Here’s what I understood</h4><p className="mt-1 max-w-[540px] text-[10px] leading-[1.6] text-[#838e86]">Review the brief. Missing details are identified explicitly—edit any field before continuing.</p></div>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {problemBriefFields.map(({ key, label, kind }) => (
@@ -383,7 +383,7 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
                           : kind === "ASSUMPTION" ? "bg-[#f3f1ec] text-[#88795f]"
                             : kind === "USER INTENT" ? "bg-[#eaf1fa] text-[#55739a]"
                               : "bg-[#eaf3ec] text-[#4e7b57]"
-                    }`}>{kind === "ASSUMPTION" ? "ASSUMPTION" : brief[key] === "Unknown" ? "UNKNOWN" : kind}</span>
+                    }`}>{kind === "ASSUMPTION" ? "ASSUMPTION" : /^(?:Unknown|Not specified in the input\.)$/i.test(brief[key].trim()) || /not specified in the input/i.test(brief[key]) ? "UNKNOWN" : kind}</span>
                   </span>
                   {status === "completed" ? (
                     <p className="whitespace-pre-wrap text-[10px] leading-[1.65] text-[#68766d]">{brief[key]}</p>
