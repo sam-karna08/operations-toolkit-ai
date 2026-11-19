@@ -25,6 +25,7 @@ import {
   transcriptionService,
 } from "@/lib/transcription-service";
 import { transcribeAndClean } from "@/lib/voice-transcript-pipeline";
+import { countProblemWords, MAX_PROBLEM_WORDS, problemWordLimitMessage } from "@/lib/problem-limits";
 
 type VoiceStatus =
   | "ready"
@@ -96,6 +97,10 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
   const recordingStartedAtRef = useRef(0);
   const startingRef = useRef(false);
   const disposedRef = useRef(false);
+  const cleanedTranscriptWordCount = countProblemWords(cleanedTranscript);
+  const transcriptExceedsWordLimit = cleanedTranscriptWordCount > MAX_PROBLEM_WORDS;
+  const briefWordCount = countProblemWords(brief?.problemStatement ?? "");
+  const briefExceedsWordLimit = briefWordCount > MAX_PROBLEM_WORDS;
 
   const releaseMedia = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
@@ -250,13 +255,14 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
   };
 
   const continueToBrief = () => {
+    if (transcriptExceedsWordLimit) return;
     const nextBrief = problemBriefService.structure(cleanedTranscript.trim());
     setBrief(nextBrief);
     setStatus("brief");
   };
 
   const confirmBrief = () => {
-    if (!brief) return;
+    if (!brief || briefExceedsWordLimit) return;
     onConfirm(brief, { rawTranscript, cleanedTranscript });
     setStatus("completed");
   };
@@ -351,8 +357,11 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
               <div><label htmlFor="cleaned-voice-transcript" className="text-[12px] font-semibold text-[#435247]">Transcript</label></div>
               <span className="rounded-full bg-white px-2.5 py-1 text-[9px] text-[#849087]">{formatDuration(elapsed)}</span>
             </div>
-            <textarea id="cleaned-voice-transcript" aria-label="Editable cleaned transcript" value={cleanedTranscript} onChange={(event) => setCleanedTranscript(event.target.value)} maxLength={10000} rows={6} className="mt-3 w-full resize-y rounded-lg border border-[#dce6de] bg-white p-3 text-[11px] leading-[1.75] text-[#46554b] outline-none focus:border-[#83ab8d]" />
-            <p className="mt-1.5 text-[9px] text-[#8b958d]">Speak naturally. You can edit anything before continuing.</p>
+            <textarea id="cleaned-voice-transcript" aria-label="Editable cleaned transcript" value={cleanedTranscript} onChange={(event) => setCleanedTranscript(event.target.value)} rows={6} className="mt-3 w-full resize-y rounded-lg border border-[#dce6de] bg-white p-3 text-[11px] leading-[1.75] text-[#46554b] outline-none focus:border-[#83ab8d]" />
+            <p aria-live="polite" className={`mt-1.5 text-[9px] ${transcriptExceedsWordLimit ? "text-[#b84d45]" : "text-[#8b958d]"}`}>
+              {cleanedTranscriptWordCount.toLocaleString()} / {MAX_PROBLEM_WORDS.toLocaleString()} words
+              {transcriptExceedsWordLimit ? ` · ${problemWordLimitMessage(cleanedTranscriptWordCount)}` : " · Speak naturally; edit anything before continuing."}
+            </p>
             {rawTranscript && (
               <details className="mt-2 rounded-lg border border-[#edf0ed] bg-white px-3 py-2">
                 <summary className="cursor-pointer text-[9px] font-medium text-[#7b877e]">View raw transcript</summary>
@@ -361,7 +370,7 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
             )}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <button onClick={resetToReady} className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[10px] font-medium text-[#718076] hover:bg-white"><RotateCcw size={13} /> Record again</button>
-              <button onClick={continueToBrief} disabled={!cleanedTranscript.trim()} className="flex items-center gap-1.5 rounded-lg bg-[#28734d] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#1e603f] disabled:cursor-not-allowed disabled:opacity-50">Build Problem Brief <ChevronRight size={13} /></button>
+              <button onClick={continueToBrief} disabled={!cleanedTranscript.trim() || transcriptExceedsWordLimit} className="flex items-center gap-1.5 rounded-lg bg-[#28734d] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#1e603f] disabled:cursor-not-allowed disabled:opacity-50">Build Problem Brief <ChevronRight size={13} /></button>
             </div>
           </div>
         )}
@@ -377,6 +386,7 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
                 <label key={key} className={`block rounded-lg border border-[#e8ede9] bg-[#fbfcfb] p-3 ${key === "problemStatement" || key === "possibleCauses" || key === "assumptions" ? "sm:col-span-2" : ""}`}>
                   <span className="mb-1.5 flex flex-wrap items-center gap-1.5">
                     <span className="text-[9px] font-semibold text-[#5c6e60]">{label}</span>
+                    {key === "problemStatement" && <span className={`text-[8px] ${briefExceedsWordLimit ? "text-[#b84d45]" : "text-[#8b958d]"}`}>{briefWordCount.toLocaleString()} / {MAX_PROBLEM_WORDS.toLocaleString()} words</span>}
                     <span className={`rounded-full px-1.5 py-0.5 text-[7px] font-bold tracking-[0.35px] ${
                       kind === "POSSIBLE CAUSE" ? "bg-[#fff2e6] text-[#a76b32]"
                         : kind === "UNKNOWN" ? "bg-[#f1eef8] text-[#78619c]"
@@ -393,6 +403,9 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
                 </label>
               ))}
             </div>
+            {briefExceedsWordLimit && (
+              <p role="alert" className="mt-3 text-[10px] text-[#b84d45]">{problemWordLimitMessage(briefWordCount)}</p>
+            )}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               {status === "completed" ? (
                 <span className="flex items-center gap-1.5 text-[10px] font-medium text-[#4d8059]"><Check size={14} /> Brief confirmed. Framework recommendations are below.</span>
@@ -402,7 +415,7 @@ export function ThinkAloud({ onConfirm, onTypeInstead }: Props) {
               {status === "brief" ? (
                 <div className="flex flex-wrap gap-2">
                   <button onClick={resetToReady} className="flex items-center gap-1.5 rounded-lg border border-[#e2e8e3] bg-white px-3 py-2 text-[10px] font-medium text-[#6d7b71] hover:bg-[#f7f9f7]"><RotateCcw size={12} /> Record again</button>
-                  <button onClick={confirmBrief} className="flex items-center gap-1.5 rounded-lg bg-[#28734d] px-3.5 py-2 text-[10px] font-semibold text-white hover:bg-[#1e603f]"><Check size={13} /> Confirm & continue</button>
+                  <button onClick={confirmBrief} disabled={briefExceedsWordLimit} className="flex items-center gap-1.5 rounded-lg bg-[#28734d] px-3.5 py-2 text-[10px] font-semibold text-white hover:bg-[#1e603f] disabled:cursor-not-allowed disabled:opacity-50"><Check size={13} /> Confirm & continue</button>
                 </div>
               ) : (
                 <button onClick={resetToReady} className="flex items-center gap-1.5 rounded-lg border border-[#e2e8e3] bg-white px-3 py-2 text-[10px] font-medium text-[#6d7b71] hover:bg-[#f7f9f7]"><RotateCcw size={12} /> Record another problem</button>

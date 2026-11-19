@@ -143,12 +143,6 @@ function conciseProblemStatement(symptom: string) {
   return capitalize(withoutLeadIn.replace(/[.!?]*$/, "")) + ".";
 }
 
-function preserveProblemStatement(transcript: string, sentences: string[], symptom: string | undefined) {
-  if (symptom) return conciseProblemStatement(symptom);
-  const firstStatement = sentences[0] ?? transcript;
-  return /[.!?]$/.test(firstStatement) ? firstStatement : `${firstStatement}.`;
-}
-
 function factualSymptom(symptom: string) {
   if (/\bmiss(?:ed|es|ing)\s+(?:project\s+)?deadlines?|\bdeadline(?:s)?\s+(?:are|were|have been)\s+missed/i.test(symptom)) {
     return "The team has been missing project deadlines.";
@@ -314,7 +308,7 @@ export const problemBriefService = {
     const facts = summarizeKnownFacts(symptoms, causes.length);
 
     return {
-      problemStatement: preserveProblemStatement(cleaned, sentences, primarySymptom),
+      problemStatement: cleaned,
       businessContext: deriveContext(cleaned, primarySymptom),
       observableSymptoms: symptoms.length ? asBulletList(symptoms.map(conciseProblemStatement)) : unknown,
       knownFacts: asBulletList(facts),

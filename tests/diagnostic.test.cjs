@@ -31,6 +31,7 @@ const {
 const { isFrameworkApplication } = require("../lib/diagnostic.ts");
 const { getFramework } = require("../lib/frameworks.ts");
 const { attachFrameworkApplication, browserHistoryRepository } = require("../lib/history.ts");
+const { MAX_PROBLEM_WORDS } = require("../lib/problem-limits.ts");
 
 const brief = {
   problemStatement: "Invoice processing delays have increased.",
@@ -195,6 +196,19 @@ test("passes optional context and the selected analytical method into the prompt
   assert.match(prompt, /"availableMetrics":"Revenue \+8%; EBITDA -15%"/);
   assert.match(prompt, /"constraints":"Do not change financial controls"/);
   assert.match(prompt, /USER-SELECTED FRAMEWORKS: \["Variance analysis"\]/);
+});
+
+test("sends a complete 2,000-word problem to both Gemini workflows without duplication", () => {
+  const fullDescription = Array.from({ length: MAX_PROBLEM_WORDS }, (_, index) => `detail${index}`).join(" ");
+  const longBrief = { ...brief, problemStatement: fullDescription };
+  const diagnosticPrompt = buildGeminiPrompt(longBrief, { cleanedTranscript: fullDescription });
+  assert.ok(diagnosticPrompt.includes(`PROBLEM: ${fullDescription}\nBRIEF:`));
+
+  const frameworkPrompt = buildFrameworkApplicationPrompt(longBrief, getFramework("pareto"), {
+    cleanedTranscript: fullDescription,
+  });
+  assert.ok(frameworkPrompt.includes(`PROBLEM: ${fullDescription}\nCONFIRMED PROBLEM BRIEF:`));
+  assert.equal((frameworkPrompt.match(/detail1999/g) ?? []).length, 1);
 });
 
 test("applies Fishbone to the submitted problem using validated Gemini structured output", async () => {
@@ -410,5 +424,18 @@ test("diagnostic route uses Gemini and provides safe actionable failure messages
   assert.match(route, /runtimeMetadata\("success"/);
   assert.match(route, /runtimeMetadata\("fallback"/);
   assert.match(route, /modelConfigSource/);
+  assert.match(route, /countProblemWords\(problemDescription\)/);
+  assert.match(route, /problemWordLimitMessage\(problemWordCount\)/);
+  assert.match(route, /problemWordCount > MAX_PROBLEM_WORDS/);
   assert.doesNotMatch(route, /process\.env\.[A-Z_]+[,}]/);
+});
+
+test("frontend exposes the 2,000-word limit for text and voice descriptions", () => {
+  const homePage = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+  const voiceInput = fs.readFileSync(path.resolve(__dirname, "../components/think-aloud.tsx"), "utf8");
+  assert.match(homePage, /MAX_PROBLEM_WORDS/);
+  assert.match(homePage, /countProblemWords\(problem\)/);
+  assert.doesNotMatch(homePage, /maxLength=\{500\}|\/500\b/);
+  assert.match(voiceInput, /countProblemWords\(cleanedTranscript\)/);
+  assert.match(voiceInput, /problemWordLimitMessage/);
 });

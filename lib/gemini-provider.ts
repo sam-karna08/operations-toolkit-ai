@@ -249,7 +249,7 @@ export const frameworkApplicationJsonSchema = {
 } as const;
 
 export function buildGeminiPrompt(brief: ProblemBrief, context: DiagnosticContext) {
-  const problem = (context.cleanedTranscript || context.rawProblem || brief.problemStatement).slice(0, 700);
+  const problem = context.cleanedTranscript || context.rawProblem || brief.problemStatement;
   const short = (value: string) => value.slice(0, 180);
   const briefContext = {
     suspectedCauses: short(brief.possibleCauses),
@@ -406,6 +406,17 @@ export function buildFrameworkApplicationPrompt(
     facts: priorDiagnostic.evidenceItems.filter((item) => item.status === "SUPPORTED").slice(0, 3).map((item) => item.statement),
     hypotheses: priorDiagnostic.causalFactors.slice(0, 4).map(({ title, description, validationRequired }) => ({ title, description, validationRequired: validationRequired.slice(0, 1) })),
   } : undefined;
+  const supportingText = (value: string) => value.slice(0, 400);
+  const briefContext = {
+    businessContext: supportingText(brief.businessContext),
+    observableSymptoms: supportingText(brief.observableSymptoms),
+    knownFacts: supportingText(brief.knownFacts),
+    possibleCauses: supportingText(brief.possibleCauses),
+    stakeholders: supportingText(brief.stakeholders),
+    desiredOutcome: supportingText(brief.desiredOutcome),
+    importantUnknowns: supportingText(brief.importantUnknowns),
+    assumptions: supportingText(brief.assumptions),
+  };
   const visualizationGuidance = framework.id === "fishbone"
     ? "Groups must be cause categories; group items are testable hypotheses, never confirmed causes."
     : framework.id === "five-whys"
@@ -433,8 +444,9 @@ Fit guidance: ${framework.why} Best used when: ${framework.when}
 Method-specific visualization: ${visualizationGuidance}
 Evidence integrity: confirmedFacts must repeat only user-supplied facts. All inferred causes stay HYPOTHESIS, with a specific evidence test. Do not invent data, root causes, percentages, impacts, owners, or completed work. If numerical evidence is missing, show that explicitly and do not draw quantitative conclusions.
 Explain how the method transforms this specific problem, the result that follows from current information, limits, missing evidence, uncertainty, exactly 3 ranked investigations, and exactly 3 practical next actions. Keep language concrete and concise. Provide a function-level owner and a measurable KPI for each action; if no baseline exists, name a measurement to establish rather than an invented target.
-PROBLEM: ${(context.cleanedTranscript || context.rawProblem || brief.problemStatement).slice(0, 700)}
-CONFIRMED PROBLEM BRIEF: ${JSON.stringify(brief)}
+The problem description below is complete and authoritative; supporting brief fields may summarize it.
+PROBLEM: ${context.cleanedTranscript || context.rawProblem || brief.problemStatement}
+CONFIRMED PROBLEM BRIEF: ${JSON.stringify(briefContext)}
 OPTIONAL USER CONTEXT: ${JSON.stringify(optionalContext)}
 ${priorEvidence ? `PRIOR VALIDATED DIAGNOSTIC EVIDENCE: ${JSON.stringify(priorEvidence)}` : ""}
 For visualization groups, include meaningful nodes only, with no more than 8 nodes per group. Node status must be SUPPORTED only when directly stated; use HYPOTHESIS or VALIDATION REQUIRED otherwise.`;

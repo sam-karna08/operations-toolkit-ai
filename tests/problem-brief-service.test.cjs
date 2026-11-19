@@ -12,6 +12,7 @@ require.extensions[".ts"] = (loadedModule, fileName) => {
 };
 
 const { problemBriefService } = require("../lib/problem-brief-service.ts");
+const { MAX_PROBLEM_WORDS, countProblemWords, problemWordLimitMessage } = require("../lib/problem-limits.ts");
 
 const manufacturingProblem = "A manufacturing company reports revenue 8% above budget, yet EBITDA is 15% below forecast and operating cash flow has turned negative. Investigate price-volume-mix, cost variances, working capital, and forecast assumptions. Identify the three highest-priority investigations and recommend evidence-based corrective actions.";
 
@@ -39,4 +40,19 @@ test("describes missing analysis data rather than replacing the problem with Unk
   assert.match(brief.importantUnknowns, /Baseline by period and breakdown/i);
   assert.match(brief.businessContext, /Time period and operating conditions are not specified/i);
   assert.doesNotMatch(brief.problemStatement, /\bUnknown\b/);
+});
+
+test("counts the 2,000-word boundary and reports over-limit descriptions", () => {
+  const allowed = Array.from({ length: MAX_PROBLEM_WORDS }, (_, index) => `word${index}`).join(" ");
+  assert.equal(countProblemWords(allowed), 2_000);
+  assert.equal(countProblemWords(`${allowed} extra`), 2_001);
+  assert.equal(countProblemWords(" \n\t "), 0);
+  assert.match(problemWordLimitMessage(2_001), /2,001 words.*maximum is 2,000 words/i);
+});
+
+test("preserves the complete long description in the structured Problem Brief", () => {
+  const fullDescription = Array.from({ length: MAX_PROBLEM_WORDS }, (_, index) => `detail${index}`).join(" ");
+  const problemBrief = problemBriefService.structure(fullDescription);
+  assert.equal(problemBrief.problemStatement, fullDescription);
+  assert.match(problemBrief.problemStatement, /detail1999$/);
 });

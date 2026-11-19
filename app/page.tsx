@@ -39,6 +39,7 @@ import { type FiveWhysWorkspaceData } from "@/lib/five-whys";
 import { isFrameworkApplication, type FrameworkApplication, type OperationsDiagnostic } from "@/lib/diagnostic";
 import { type ProblemBrief } from "@/lib/problem-brief";
 import { problemBriefService } from "@/lib/problem-brief-service";
+import { countProblemWords, MAX_PROBLEM_WORDS, problemWordLimitMessage } from "@/lib/problem-limits";
 import { OperationsLandscape } from "@/components/operations-landscape";
 import { FrameworkApplicationPanel } from "@/components/framework-application-panel";
 
@@ -338,6 +339,8 @@ function HomePage({
   const setContextField = (key: keyof Omit<AnalysisContext, "selectedFrameworks">, value: string) => {
     setContext({ ...context, [key]: value });
   };
+  const problemWordCount = countProblemWords(problem);
+  const problemExceedsWordLimit = problemWordCount > MAX_PROBLEM_WORDS;
   return (
     <div className="mx-auto max-w-[1520px] px-3 pb-14 sm:px-5 lg:px-8">
       <OperationsLandscape onBegin={() => setInputMode("type")} />
@@ -374,22 +377,29 @@ function HomePage({
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") onAnalyze();
               }}
-              maxLength={500}
               placeholder="e.g. Our team spends too much time fixing order errors..."
               rows={2}
               className="w-full resize-y bg-transparent px-2 py-2 text-[12px] leading-[1.7] text-[#e0edef] outline-none placeholder:text-[#657e88]"
             />
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] px-1 pt-2">
-              <div className="pl-1 text-[9px] text-[#718a93]">{problem.length}/500 <span className="mx-1">·</span> Press ⌘ + Enter to analyze</div>
+              <div className="pl-1 text-[9px] text-[#718a93]" aria-live="polite">
+                {problemWordCount.toLocaleString()} / {MAX_PROBLEM_WORDS.toLocaleString()} words
+                <span className="mx-1">·</span> Press ⌘ + Enter to analyze
+              </div>
               <button
                 onClick={onAnalyze}
-                disabled={!problem.trim() || loading || diagnosticLoading}
+                disabled={!problem.trim() || problemExceedsWordLimit || loading || diagnosticLoading}
                 className="flex h-[36px] items-center gap-2 rounded-lg border border-[#78e6dc]/20 bg-gradient-to-r from-[#12656a] to-[#1d6178] px-3.5 text-[10px] font-semibold text-[#e5fffb] shadow-[0_5px_20px_rgba(32,160,169,0.16)] transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "Preparing analysis…" : diagnosticLoading ? "Analysis in progress…" : <>Start guided diagnostic <ArrowRight size={13} /></>}
               </button>
             </div>
           </div>
+          {problemExceedsWordLimit && (
+            <p role="alert" className="mt-2 px-1 text-[10px] leading-[1.6] text-[#ffb5a4]">
+              {problemWordLimitMessage(problemWordCount)}
+            </p>
+          )}
           <button type="button" aria-expanded={contextOpen} onClick={() => setContextOpen((open) => !open)} className="mt-3 flex items-center gap-2 rounded-lg px-1 py-1.5 text-[10px] font-semibold text-[#75d8d0] hover:text-[#a8f4ec]">
             <Plus size={13} className={`transition-transform ${contextOpen ? "rotate-45" : ""}`} />
             {contextOpen ? "Hide optional context" : "Add context to sharpen the analysis"}
@@ -704,7 +714,8 @@ export default function Home() {
     context: AnalysisContext = analysisContext,
   ) => {
     const cleanedProblem = brief.problemStatement.trim();
-    if (!cleanedProblem || loading || diagnosticLoading) return;
+    const submittedProblem = transcript?.cleanedTranscript ?? cleanedProblem;
+    if (!cleanedProblem || countProblemWords(submittedProblem) > MAX_PROBLEM_WORDS || loading || diagnosticLoading) return;
     setLastAnalysisRequest({ brief, transcript, context });
     setLoading(true);
     setDiagnostic(null);
@@ -775,7 +786,7 @@ export default function Home() {
 
   const handleAnalyze = () => {
     const cleanedProblem = problem.trim();
-    if (!cleanedProblem || loading || diagnosticLoading) return;
+    if (!cleanedProblem || countProblemWords(cleanedProblem) > MAX_PROBLEM_WORDS || loading || diagnosticLoading) return;
     void runAnalysis(problemBriefService.structure(cleanedProblem), undefined, analysisContext);
   };
 

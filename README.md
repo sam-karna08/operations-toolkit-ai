@@ -36,6 +36,7 @@ Then open [http://localhost:3000](http://localhost:3000). Run `npm run typecheck
 ## What’s included
 
 - A problem-analysis homepage with example prompts and ranked framework recommendations.
+- Typed and voice problem descriptions support up to 2,000 words, with a live counter and server-side validation.
 - A “Think aloud” voice flow with on-device Whisper transcription, recording controls, a directly editable cleaned transcript, access to the original raw transcript, and a reviewable Problem Brief.
 - A searchable, category-filtered library of 19 business and operations frameworks.
 - A one-shot AI Operations Diagnostic that applies relevant frameworks internally, separates supported facts from hypotheses, and produces visual findings, validation priorities, actions, and an executive summary.
